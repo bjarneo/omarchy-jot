@@ -2,8 +2,9 @@
 
 imports.gi.versions.Gtk = '4.0';
 imports.gi.versions.Adw = '1';
+imports.gi.versions.GtkSource = '5';
 
-const { Gtk, Gio, GLib, Adw, GObject } = imports.gi;
+const { Gtk, Gio, GLib, Adw, GObject, GtkSource } = imports.gi;
 
 // Constants
 const APP_ID = 'com.github.jot';
@@ -115,6 +116,72 @@ class ThemeManager {
         } catch (e) {
             print(`Failed to setup theme monitor: ${e.message}`);
         }
+    }
+
+    createStyleScheme() {
+        const schemeManager = GtkSource.StyleSchemeManager.get_default();
+        const baseScheme = schemeManager.get_scheme('classic');
+
+        // Create a new style scheme XML
+        const c = this.colors;
+        const schemeXml = `<?xml version="1.0" encoding="UTF-8"?>
+<style-scheme id="jot-alacritty" name="Jot Alacritty" version="1.0">
+  <author>Jot</author>
+  <description>Alacritty color scheme for Jot</description>
+
+  <!-- Base styles -->
+  <style name="text" foreground="${c.white}" background="${c.black}"/>
+  <style name="cursor" foreground="${c.cursor}"/>
+  <style name="current-line" background="${c.black}"/>
+  <style name="selection" background="${c.blue}" foreground="${c.white}"/>
+
+  <!-- Markdown syntax -->
+  <style name="def:heading" foreground="${c.blue}" bold="true"/>
+  <style name="def:emphasis" foreground="${c.magenta}" italic="true"/>
+  <style name="def:strong-emphasis" foreground="${c.magenta}" bold="true"/>
+  <style name="def:inline-code" foreground="${c.cyan}" background="${c.black}"/>
+  <style name="def:code" foreground="${c.cyan}"/>
+  <style name="def:link-text" foreground="${c.blue}" underline="single"/>
+  <style name="def:link-destination" foreground="${c.blue}"/>
+  <style name="def:list-marker" foreground="${c.green}"/>
+  <style name="def:net-address" foreground="${c.blue}" underline="single"/>
+
+  <!-- Markdown specific -->
+  <style name="markdown:header" foreground="${c.yellow}" bold="true"/>
+  <style name="markdown:emphasis" foreground="${c.magenta}" italic="true"/>
+  <style name="markdown:strong-emphasis" foreground="${c.magenta}" bold="true"/>
+  <style name="markdown:code" foreground="${c.cyan}"/>
+  <style name="markdown:code-block" foreground="${c.cyan}"/>
+  <style name="markdown:url" foreground="${c.blue}" underline="single"/>
+  <style name="markdown:link-text" foreground="${c.blue}"/>
+  <style name="markdown:label" foreground="${c.green}"/>
+  <style name="markdown:list-marker" foreground="${c.green}"/>
+  <style name="markdown:horizontal-rule" foreground="${c.white}"/>
+  <style name="markdown:backslash-escape" foreground="${c.red}"/>
+</style-scheme>`;
+
+        // Save scheme to temp location
+        const homeDir = GLib.get_home_dir();
+        const schemesDir = GLib.build_filenamev([homeDir, '.local', 'share', 'gtksourceview-5', 'styles']);
+
+        // Create directory if it doesn't exist
+        const schemesDirFile = Gio.File.new_for_path(schemesDir);
+        try {
+            schemesDirFile.make_directory_with_parents(null);
+        } catch (e) {
+            if (!e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.EXISTS)) {
+                print(`Error creating schemes directory: ${e.message}`);
+            }
+        }
+
+        const schemePath = GLib.build_filenamev([schemesDir, 'jot-alacritty.xml']);
+        const schemeFile = Gio.File.new_for_path(schemePath);
+        schemeFile.replace_contents(schemeXml, null, false, Gio.FileCreateFlags.NONE, null);
+
+        // Force reload of style schemes
+        schemeManager.force_rescan();
+
+        return schemeManager.get_scheme('jot-alacritty');
     }
 
     generateCSS() {
@@ -446,7 +513,17 @@ class JotWindow extends Adw.ApplicationWindow {
     }
 
     _createTextView() {
-        this._textView = new Gtk.TextView({
+        // Create GtkSourceView with markdown language
+        const languageManager = GtkSource.LanguageManager.get_default();
+        const markdownLang = languageManager.get_language('markdown');
+
+        this._buffer = new GtkSource.Buffer({
+            language: markdownLang,
+            highlight_syntax: true,
+        });
+
+        this._textView = new GtkSource.View({
+            buffer: this._buffer,
             wrap_mode: Gtk.WrapMode.WORD_CHAR,
             vexpand: true,
             hexpand: true,
@@ -454,11 +531,12 @@ class JotWindow extends Adw.ApplicationWindow {
             right_margin: 20,
             top_margin: 12,
             bottom_margin: 20,
+            show_line_numbers: false,
+            highlight_current_line: false,
         });
         this._textView.add_css_class('jot-textview');
 
-        const buffer = this._textView.get_buffer();
-        buffer.connect('changed', () => this._updateStatusCounts());
+        this._buffer.connect('changed', () => this._updateStatusCounts());
 
         // Wrap in ScrolledWindow for scrolling
         const scrolledWindow = new Gtk.ScrolledWindow({
@@ -544,7 +622,11 @@ class JotWindow extends Adw.ApplicationWindow {
 
     _setupTheme() {
         this._applyCSS();
-        this._themeManager.setupMonitor(() => this._applyCSS());
+        this._applySyntaxHighlighting();
+        this._themeManager.setupMonitor(() => {
+            this._applyCSS();
+            this._applySyntaxHighlighting();
+        });
     }
 
     _applyCSS() {
@@ -556,6 +638,13 @@ class JotWindow extends Adw.ApplicationWindow {
             cssProvider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         );
+    }
+
+    _applySyntaxHighlighting() {
+        const scheme = this._themeManager.createStyleScheme();
+        if (scheme) {
+            this._buffer.set_style_scheme(scheme);
+        }
     }
 
     _setupKeyboardShortcuts() {
@@ -588,9 +677,8 @@ class JotWindow extends Adw.ApplicationWindow {
     }
 
     _updateStatusCounts() {
-        const buffer = this._textView.get_buffer();
-        const [start, end] = buffer.get_bounds();
-        const text = buffer.get_text(start, end, false);
+        const [start, end] = this._buffer.get_bounds();
+        const text = this._buffer.get_text(start, end, false);
 
         const charCount = text.length;
         const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
@@ -600,9 +688,8 @@ class JotWindow extends Adw.ApplicationWindow {
     }
 
     _saveNote() {
-        const buffer = this._textView.get_buffer();
-        const [start, end] = buffer.get_bounds();
-        const content = buffer.get_text(start, end, false);
+        const [start, end] = this._buffer.get_bounds();
+        const content = this._buffer.get_text(start, end, false);
 
         if (!content.trim()) {
             return;
@@ -684,8 +771,7 @@ class JotWindow extends Adw.ApplicationWindow {
             const { title, content, filePath, filename } = FileManager.loadFile(file);
 
             this._titleEntry.set_text(title);
-            const buffer = this._textView.get_buffer();
-            buffer.set_text(content, -1);
+            this._buffer.set_text(content, -1);
 
             this._currentFilename = filename;
             this._currentFilePath = filePath; // Store the full path
