@@ -15,6 +15,9 @@ const FEEDBACK_TIMEOUT_MS = 3000;
 const KEY_ESCAPE = 65307;
 const KEY_ENTER = 65293;
 const KEY_S = 115;
+const KEY_PLUS = 61;     // '+' key (also '=' key without shift)
+const KEY_MINUS = 45;    // '-' key
+const KEY_0 = 48;        // '0' key
 const CTRL_MASK = 4;
 
 // File patterns
@@ -117,22 +120,34 @@ class ThemeManager {
         }
     }
 
-    generateCSS() {
+    generateCSS(zoomLevel = 100) {
         const c = this.colors;
+        const zoom = zoomLevel / 100;
         return `
             window {
                 background: ${c.black};
             }
 
             .jot-textview {
-                background: ${c.black};
+                background: transparent;
                 color: ${c.white};
-                font-size: 15px;
+                font-size: ${15 * zoom}px;
+                font-family: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', 'DejaVu Sans Mono', 'Courier New', monospace;
                 caret-color: ${c.white};
             }
 
             .jot-textview text {
-                background: ${c.black};
+                background: transparent;
+                color: ${c.white};
+            }
+            
+            textview {
+                background: transparent;
+                color: ${c.white};
+            }
+            
+            textview > text {
+                background: transparent;
                 color: ${c.white};
             }
 
@@ -179,8 +194,9 @@ class ThemeManager {
 
             .jot-hash {
                 color: ${c.white};
-                font-size: 18px;
+                font-size: ${18 * zoom}px;
                 font-weight: bold;
+                font-family: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', 'DejaVu Sans Mono', 'Courier New', monospace;
                 margin-right: 8px;
             }
 
@@ -188,8 +204,9 @@ class ThemeManager {
                 background: transparent;
                 border: none;
                 color: ${c.white};
-                font-size: 18px;
+                font-size: ${18 * zoom}px;
                 font-weight: bold;
+                font-family: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', 'DejaVu Sans Mono', 'Courier New', monospace;
                 padding: 0;
                 box-shadow: none;
                 outline: none;
@@ -398,6 +415,9 @@ class JotWindow extends Adw.ApplicationWindow {
         this._currentFilename = 'untitled.md';
         this._currentFilePath = null; // Track the full path of opened file
         this._themeManager = new ThemeManager();
+        this._lastSaveClickTime = 0; // Track double-click for Save As
+        this._zoomLevel = 100; // Zoom level percentage (default 100%)
+        this._zoomTimeoutId = null; // Track zoom indicator timeout
 
         this._buildUI();
         this._setupTheme();
@@ -438,6 +458,11 @@ class JotWindow extends Adw.ApplicationWindow {
         });
         this._titleEntry.add_css_class('jot-title');
         this._titleEntry.connect('changed', () => this._updateFilenameDisplay());
+        
+        // Add Enter key handler to switch focus to text view
+        this._titleEntry.connect('activate', () => {
+            this._textView.grab_focus();
+        });
 
         titleBox.append(hashLabel);
         titleBox.append(this._titleEntry);
@@ -456,9 +481,6 @@ class JotWindow extends Adw.ApplicationWindow {
             bottom_margin: 20,
         });
         this._textView.add_css_class('jot-textview');
-
-        const buffer = this._textView.get_buffer();
-        buffer.connect('changed', () => this._updateStatusCounts());
 
         // Wrap in ScrolledWindow for scrolling
         const scrolledWindow = new Gtk.ScrolledWindow({
@@ -482,18 +504,6 @@ class JotWindow extends Adw.ApplicationWindow {
         });
         this._statusBar.add_css_class('jot-statusbar');
 
-        this._charCountLabel = new Gtk.Label({
-            label: '0 characters',
-            halign: Gtk.Align.START,
-        });
-        this._charCountLabel.add_css_class('status-label');
-
-        this._wordCountLabel = new Gtk.Label({
-            label: '0 words',
-            halign: Gtk.Align.START,
-        });
-        this._wordCountLabel.add_css_class('status-label');
-
         const jotDir = FileManager.getJotDirectory();
         this._pathLabel = new Gtk.Label({
             label: GLib.build_filenamev([jotDir, this._currentFilename]),
@@ -505,8 +515,6 @@ class JotWindow extends Adw.ApplicationWindow {
 
         const buttonBox = this._createButtonBox();
 
-        this._statusBar.append(this._charCountLabel);
-        this._statusBar.append(this._wordCountLabel);
         this._statusBar.append(this._pathLabel);
         this._statusBar.append(buttonBox);
 
@@ -521,7 +529,7 @@ class JotWindow extends Adw.ApplicationWindow {
         });
 
         const openButton = new Gtk.Button({
-            label: '+',
+            label: 'Open',
         });
         openButton.add_css_class('jot-open-button');
         openButton.connect('clicked', () => this._openFileDialog());
@@ -549,7 +557,7 @@ class JotWindow extends Adw.ApplicationWindow {
 
     _applyCSS() {
         const cssProvider = new Gtk.CssProvider();
-        const css = this._themeManager.generateCSS();
+        const css = this._themeManager.generateCSS(this._zoomLevel);
         cssProvider.load_from_data(css, -1);
         Gtk.StyleContext.add_provider_for_display(
             this.get_display(),
@@ -561,12 +569,32 @@ class JotWindow extends Adw.ApplicationWindow {
     _setupKeyboardShortcuts() {
         const keyController = new Gtk.EventControllerKey();
         keyController.connect('key-pressed', (controller, keyval, keycode, state) => {
+            // Debug: log Ctrl key presses
+            if (state & CTRL_MASK) {
+                print(`Ctrl key pressed: keyval=${keyval}, keycode=${keycode}`);
+            }
+            
             if (keyval === KEY_ESCAPE) {
                 this.close();
                 return true;
             }
             if ((keyval === KEY_ENTER || keyval === KEY_S) && (state & CTRL_MASK)) {
                 this._saveNote();
+                return true;
+            }
+            // Zoom in: Ctrl + or Ctrl = (multiple keycodes for compatibility)
+            if ((keyval === KEY_PLUS || keyval === 43 || keyval === 61 || keyval === 65451 || keyval === 65455) && (state & CTRL_MASK)) {
+                this._zoomIn();
+                return true;
+            }
+            // Zoom out: Ctrl - (multiple keycodes for compatibility)
+            if ((keyval === KEY_MINUS || keyval === 45 || keyval === 95 || keyval === 65109 || keyval === 65453) && (state & CTRL_MASK)) {
+                this._zoomOut();
+                return true;
+            }
+            // Reset zoom: Ctrl 0
+            if (keyval === KEY_0 && (state & CTRL_MASK)) {
+                this._zoomReset();
                 return true;
             }
             return false;
@@ -587,65 +615,157 @@ class JotWindow extends Adw.ApplicationWindow {
         this._pathLabel.set_label(GLib.build_filenamev([jotDir, this._currentFilename]));
     }
 
-    _updateStatusCounts() {
-        const buffer = this._textView.get_buffer();
-        const [start, end] = buffer.get_bounds();
-        const text = buffer.get_text(start, end, false);
-
-        const charCount = text.length;
-        const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
-
-        this._charCountLabel.set_label(`${charCount} characters`);
-        this._wordCountLabel.set_label(`${wordCount} words`);
-    }
-
     _saveNote() {
         const buffer = this._textView.get_buffer();
         const [start, end] = buffer.get_bounds();
         const content = buffer.get_text(start, end, false);
 
         if (!content.trim()) {
+            this._showFeedback('⚠ Nothing to save');
             return;
         }
 
-        try {
-            const title = this._titleEntry.get_text().trim();
-
-            // If we have an opened file path, save back to that location
-            if (this._currentFilePath) {
-                const now = GLib.DateTime.new_now_local();
-                const timestamp = now.format('%Y-%m-%d %H:%M:%S');
-
-                let fileContent = '';
-                if (title) {
-                    fileContent = `# ${title}\n\n`;
+        const title = this._titleEntry.get_text().trim();
+        
+        // Check for double-click (within 1 second)
+        const currentTime = GLib.get_monotonic_time() / 1000; // Convert to milliseconds
+        const timeSinceLastClick = currentTime - this._lastSaveClickTime;
+        const isDoubleClick = timeSinceLastClick < 1000;
+        this._lastSaveClickTime = currentTime;
+        
+        // If file exists and not double-click, just save directly
+        if (this._currentFilePath && !isDoubleClick) {
+            const file = Gio.File.new_for_path(this._currentFilePath);
+            this._saveToFile(file, title, content);
+            return;
+        }
+        
+        // Show "Save As" dialog for new files or double-click
+        this._showSaveAsDialog(title, content);
+    }
+    
+    _showSaveAsDialog(title, content) {
+        // Create file save dialog using FileChooserNative
+        const dialog = new Gtk.FileChooserNative({
+            title: 'Save File',
+            action: Gtk.FileChooserAction.SAVE,
+            transient_for: this,
+            modal: true,
+        });
+        
+        // Set up file filter for text files
+        const filter = new Gtk.FileFilter();
+        FILE_PATTERNS.forEach(pattern => filter.add_pattern(pattern));
+        filter.set_name(FILE_FILTER_NAME);
+        dialog.add_filter(filter);
+        
+        // Set initial folder to Jot directory
+        FileManager.ensureJotDirectoryExists();
+        const jotDir = FileManager.getJotDirectory();
+        dialog.set_current_folder(Gio.File.new_for_path(jotDir));
+        
+        // Suggest a filename
+        const suggestedFilename = this._currentFilename || FileManager.generateFilename(title);
+        dialog.set_current_name(suggestedFilename);
+        
+        // Show the save dialog
+        dialog.connect('response', (dialog, response) => {
+            if (response === Gtk.ResponseType.ACCEPT) {
+                const file = dialog.get_file();
+                if (file) {
+                    this._saveToFile(file, title, content);
                 }
-                fileContent += `*Created: ${timestamp}*\n\n${content}\n`;
-
-                const file = Gio.File.new_for_path(this._currentFilePath);
-                const outputStream = file.replace(null, false, Gio.FileCreateFlags.NONE, null);
-                outputStream.write_all(fileContent, null);
-                outputStream.close(null);
-
-                print(`Note saved to ${this._currentFilePath}`);
-                this._showFeedback(`✓ Saved: ${this._currentFilename}`);
-            } else {
-                // New note - save to Jot directory
-                const filename = FileManager.saveNote(title, content);
-                this._showFeedback(`✓ Saved: ${filename}`);
             }
+            dialog.destroy();
+        });
+        
+        dialog.show();
+    }
+    
+    _saveToFile(file, title, content) {
+        try {
+            const now = GLib.DateTime.new_now_local();
+            const timestamp = now.format('%Y-%m-%d %H:%M:%S');
+            
+            let fileContent = '';
+            if (title) {
+                fileContent = `# ${title}\n\n`;
+            }
+            fileContent += `*Created: ${timestamp}*\n\n${content}\n`;
+            
+            const outputStream = file.replace(null, false, Gio.FileCreateFlags.NONE, null);
+            outputStream.write_all(fileContent, null);
+            outputStream.close(null);
+            
+            // Update current file info
+            this._currentFilePath = file.get_path();
+            this._currentFilename = file.get_basename();
+            this._pathLabel.set_label(this._currentFilePath);
+            
+            print(`Note saved to ${this._currentFilePath}`);
+            this._showFeedback(`✓ Saved: ${this._currentFilename}`);
         } catch (e) {
-            print(`Error saving note: ${e.message}`);
+            print(`Error writing file: ${e.message}`);
             this._showFeedback(`✗ Error: ${e.message}`);
         }
     }
 
     _showFeedback(message) {
-        const originalLabel = this._pathLabel.get_label();
+        // Cancel any pending zoom timeout
+        if (this._zoomTimeoutId) {
+            GLib.source_remove(this._zoomTimeoutId);
+            this._zoomTimeoutId = null;
+        }
+        
         this._pathLabel.set_label(message);
 
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, FEEDBACK_TIMEOUT_MS, () => {
-            this._pathLabel.set_label(originalLabel);
+            // Restore to actual path, not captured label
+            const actualPath = this._currentFilePath || 
+                               GLib.build_filenamev([FileManager.getJotDirectory(), this._currentFilename]);
+            this._pathLabel.set_label(actualPath);
+            return false;
+        });
+    }
+
+    _zoomIn() {
+        this._zoomLevel = Math.min(this._zoomLevel + 10, 300); // Max 300%
+        print(`Zoom in called, new level: ${this._zoomLevel}%`);
+        this._applyCSS();
+        this._showZoomLevel();
+    }
+
+    _zoomOut() {
+        this._zoomLevel = Math.max(this._zoomLevel - 10, 50); // Min 50%
+        print(`Zoom out called, new level: ${this._zoomLevel}%`);
+        this._applyCSS();
+        this._showZoomLevel();
+    }
+
+    _zoomReset() {
+        this._zoomLevel = 100;
+        print(`Zoom reset called, level: ${this._zoomLevel}%`);
+        this._applyCSS();
+        this._showZoomLevel();
+    }
+
+    _showZoomLevel() {
+        // Cancel any existing zoom timeout
+        if (this._zoomTimeoutId) {
+            GLib.source_remove(this._zoomTimeoutId);
+            this._zoomTimeoutId = null;
+        }
+        
+        // Show zoom level
+        this._pathLabel.set_label(`Zoom: ${this._zoomLevel}%`);
+
+        // Set timeout to restore the actual path
+        this._zoomTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
+            // Get the actual current path to restore
+            const actualPath = this._currentFilePath || 
+                               GLib.build_filenamev([FileManager.getJotDirectory(), this._currentFilename]);
+            this._pathLabel.set_label(actualPath);
+            this._zoomTimeoutId = null;
             return false;
         });
     }
