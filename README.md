@@ -102,6 +102,15 @@ Configure a global hotkey in your desktop environment to launch Jot:
 # ~/.config/hypr/bindings.conf
 bindd = SUPER SHIFT, J, Jot, exec, uwsm app -- jot
 ```
+### Open Jot as an Overlay 
+
+Open Jot in a Floating window:
+
+**Omarchy:**
+```bash
+# ~/.config/hypr/bindings.conf
+windowrule = float, class:com.github.jot
+```
 
 ## File Organization
 
