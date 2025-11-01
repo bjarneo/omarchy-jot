@@ -21,8 +21,6 @@ https://github.com/user-attachments/assets/e132e309-d115-4bd1-a965-b219b8458457
 ```bash
 yay -S jot-git
 ```
-```
-```
 
 ## Development
 
@@ -101,6 +99,15 @@ Configure a global hotkey in your desktop environment to launch Jot:
 ```bash
 # ~/.config/hypr/bindings.conf
 bindd = SUPER SHIFT, J, Jot, exec, uwsm app -- jot
+```
+### Open Jot as an Overlay 
+
+Open Jot in a Floating window:
+
+**Omarchy:**
+```bash
+# ~/.config/hypr/bindings.conf
+windowrule = float, class:com.github.jot
 ```
 
 ## File Organization
