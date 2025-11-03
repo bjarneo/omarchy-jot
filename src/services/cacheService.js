@@ -1,11 +1,12 @@
-const { Gio, GLib } = imports.gi;
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
 
 // Cache configuration
 const CACHE_PATH = ['.cache', 'jot'];
 const CACHE_FILE = 'autosave.json';
 const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
 
-var CacheService = class CacheService {
+export class CacheService {
     static getCachePath() {
         const homeDir = GLib.get_home_dir();
         const cacheDir = GLib.build_filenamev([homeDir, ...CACHE_PATH]);
@@ -109,4 +110,4 @@ var CacheService = class CacheService {
     static hasValidCache() {
         return this.loadCache() !== null;
     }
-};
+}

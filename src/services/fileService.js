@@ -2,14 +2,15 @@
 // FILE SERVICE
 // ============================================================================
 
-const { Gio, GLib } = imports.gi;
-const Constants = imports.src.constants.defaults;
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+import * as Constants from '../constants/defaults.js';
 
 /**
  * Service for file operations
  * Handles reading, writing, and parsing markdown files
  */
-var FileService = class FileService {
+export class FileService {
     /**
      * Get the Jot directory path
      */
@@ -229,4 +230,4 @@ var FileService = class FileService {
             };
         }
     }
-};
+}

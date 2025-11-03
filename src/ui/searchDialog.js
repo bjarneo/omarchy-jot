@@ -2,16 +2,17 @@
 // SEARCH DIALOG
 // ============================================================================
 
-const { Gtk, Gio } = imports.gi;
-const Constants = imports.src.constants.defaults;
-const FileService = imports.src.services.fileService.FileService;
-const SearchService = imports.src.services.searchService.SearchService;
+import Gtk from 'gi://Gtk';
+import Gio from 'gi://Gio';
+import * as Constants from '../constants/defaults.js';
+import { FileService } from '../services/fileService.js';
+import { SearchService } from '../services/searchService.js';
 
 /**
  * Fuzzy search dialog component
  * Provides file search with preview
  */
-var SearchDialogBuilder = class SearchDialogBuilder {
+export class SearchDialogBuilder {
     /**
      * Create and show the search dialog
      * @param {Gtk.Window} parent - Parent window
@@ -264,4 +265,4 @@ var SearchDialogBuilder = class SearchDialogBuilder {
         });
         listBox.add_controller(listKeyController);
     }
-};
+}

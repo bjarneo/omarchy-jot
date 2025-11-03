@@ -3,19 +3,19 @@
 // ============================================================================
 
 // Application constants
-var APP_ID = 'com.github.jot';
-var APP_TITLE = 'Jot';
+export const APP_ID = 'com.github.jot';
+export const APP_TITLE = 'Jot';
 
 // Directories
-var JOT_DIR = ['Documents', 'Jot'];
-var THEME_PATH = ['.config', 'omarchy', 'current', 'theme', 'alacritty.toml'];
+export const JOT_DIR = ['Documents', 'Jot'];
+export const THEME_PATH = ['.config', 'omarchy', 'current', 'theme', 'alacritty.toml'];
 
 // Timing
-var FEEDBACK_TIMEOUT_MS = 3000;
-var ZOOM_DISPLAY_MS = 1000;
+export const FEEDBACK_TIMEOUT_MS = 3000;
+export const ZOOM_DISPLAY_MS = 1000;
 
 // Keyboard keycodes
-var Keys = {
+export const Keys = {
     ESCAPE: 65307,
     ENTER: 65293,
     S: 115,
@@ -28,11 +28,11 @@ var Keys = {
 };
 
 // File patterns
-var FILE_PATTERNS = ['*.md', '*.txt'];
-var FILE_FILTER_NAME = 'Text files (*.md, *.txt)';
+export const FILE_PATTERNS = ['*.md', '*.txt'];
+export const FILE_FILTER_NAME = 'Text files (*.md, *.txt)';
 
 // UI dimensions
-var UI = {
+export const UI = {
     DEFAULT_WIDTH: 700,
     DEFAULT_HEIGHT: 500,
     SEARCH_DIALOG_WIDTH: 800,
@@ -44,7 +44,7 @@ var UI = {
 };
 
 // Zoom settings
-var Zoom = {
+export const Zoom = {
     DEFAULT: 100,
     MIN: 50,
     MAX: 300,
@@ -52,11 +52,11 @@ var Zoom = {
 };
 
 // Preview settings
-var MAX_PREVIEW_SIZE = 5000;
-var MAX_SEARCH_RESULTS = 100;
+export const MAX_PREVIEW_SIZE = 5000;
+export const MAX_SEARCH_RESULTS = 100;
 
 // Default theme colors (fallback)
-var DEFAULT_THEME = {
+export const DEFAULT_THEME = {
     background: '#0d1117',
     foreground: '#e6edf3',
     cursor: '#e6edf3',
@@ -71,5 +71,5 @@ var DEFAULT_THEME = {
 };
 
 // Auto-save configuration
-var AUTOSAVE_INTERVAL_SEC = 3;      // Save every 3 seconds
-var CACHE_EXPIRY_MINUTES = 5;      // Cache valid for 5 minutes
+export const AUTOSAVE_INTERVAL_SEC = 3;      // Save every 3 seconds
+export const CACHE_EXPIRY_MINUTES = 5;      // Cache valid for 5 minutes

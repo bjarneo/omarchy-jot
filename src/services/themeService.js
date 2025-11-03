@@ -2,14 +2,15 @@
 // THEME SERVICE
 // ============================================================================
 
-const { Gio, GLib } = imports.gi;
-const Constants = imports.src.constants.defaults;
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+import * as Constants from '../constants/defaults.js';
 
 /**
  * Service for managing application theme colors
  * Loads colors from Alacritty theme configuration
  */
-var ThemeService = class ThemeService {
+export class ThemeService {
     constructor() {
         this.colors = this._loadColors();
         this.monitor = null;
@@ -303,4 +304,4 @@ var ThemeService = class ThemeService {
             }
         `;
     }
-};
+}

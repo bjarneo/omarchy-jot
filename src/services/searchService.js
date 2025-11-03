@@ -2,13 +2,13 @@
 // SEARCH SERVICE
 // ============================================================================
 
-const { GLib } = imports.gi;
+import GLib from 'gi://GLib';
 
 /**
  * Service for fuzzy search functionality
  * Handles file searching and text highlighting
  */
-var SearchService = class SearchService {
+export class SearchService {
     /**
      * Perform fuzzy matching on text
      * @param {string} query - Search query
@@ -124,4 +124,4 @@ var SearchService = class SearchService {
 
         return results;
     }
-};
+}

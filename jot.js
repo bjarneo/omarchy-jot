@@ -1,18 +1,21 @@
-#!/usr/bin/env gjs
+#!/usr/bin/env -S gjs -m
 
-imports.gi.versions.Gtk = '4.0';
-imports.gi.versions.Adw = '1';
+import 'gi://Gtk?version=4.0';
+import 'gi://Adw?version=1';
 
-const { Gtk, Gio, GLib, Adw, GObject } = imports.gi;
+import Gtk from 'gi://Gtk';
+import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+import Adw from 'gi://Adw';
+import GObject from 'gi://GObject';
+import System from 'system';
 
 // Import our modules
-imports.searchPath.unshift('.');
-const Constants = imports.src.constants.defaults;
-const ThemeService = imports.src.services.themeService.ThemeService;
-const FileService = imports.src.services.fileService.FileService;
-const SearchService = imports.src.services.searchService.SearchService;
-const SearchDialogBuilder = imports.src.ui.searchDialog.SearchDialogBuilder;
-const CacheService = imports.src.services.cacheService.CacheService;
+import * as Constants from './src/constants/defaults.js';
+import { ThemeService } from './src/services/themeService.js';
+import { FileService } from './src/services/fileService.js';
+import { SearchDialogBuilder } from './src/ui/searchDialog.js';
+import { CacheService } from './src/services/cacheService.js';
 
 // ============================================================================
 // APPLICATION
@@ -22,10 +25,9 @@ const CacheService = imports.src.services.cacheService.CacheService;
  * Main application class
  * Manages application lifecycle and window creation
  */
-const JotApplication = GObject.registerClass(
 class JotApplication extends Adw.Application {
-    _init() {
-        super._init({
+    constructor() {
+        super({
             application_id: Constants.APP_ID,
             flags: Gio.ApplicationFlags.HANDLES_OPEN,
         });
@@ -52,7 +54,9 @@ class JotApplication extends Adw.Application {
         }
         this.activate();
     }
-});
+}
+
+GObject.registerClass(JotApplication);
 
 // ============================================================================
 // MAIN WINDOW
@@ -62,10 +66,9 @@ class JotApplication extends Adw.Application {
  * Main application window
  * Provides note editing interface
  */
-const JotWindow = GObject.registerClass(
 class JotWindow extends Adw.ApplicationWindow {
-    _init(application) {
-        super._init({
+    constructor(application) {
+        super({
             application,
             title: Constants.APP_TITLE,
             default_width: Constants.UI.DEFAULT_WIDTH,
@@ -613,11 +616,13 @@ class JotWindow extends Adw.ApplicationWindow {
 
         return false; // Allow window to close
     }
-});
+}
+
+GObject.registerClass(JotWindow);
 
 // ============================================================================
 // ENTRY POINT
 // ============================================================================
 
 const app = new JotApplication();
-app.run([imports.system.programInvocationName].concat(ARGV));
+app.run([System.programInvocationName].concat(ARGV));
