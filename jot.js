@@ -12,6 +12,7 @@ const ThemeService = imports.src.services.themeService.ThemeService;
 const FileService = imports.src.services.fileService.FileService;
 const SearchService = imports.src.services.searchService.SearchService;
 const SearchDialogBuilder = imports.src.ui.searchDialog.SearchDialogBuilder;
+const CacheService = imports.src.services.cacheService.CacheService;
 
 // ============================================================================
 // APPLICATION
@@ -71,6 +72,10 @@ class JotWindow extends Adw.ApplicationWindow {
             default_height: Constants.UI.DEFAULT_HEIGHT,
         });
 
+        // Initialize all instance variables immediately after super._init
+        this._autoSaveTimeoutId = null;
+        this._hasUnsavedChanges = false;
+
         // Initialize state
         this._state = {
             currentFilename: 'untitled.md',
@@ -86,7 +91,14 @@ class JotWindow extends Adw.ApplicationWindow {
         this._setupTheme();
         this._setupKeyboardShortcuts();
 
-        this._titleEntry.grab_focus();
+        // Check for cached content on startup
+        const cache = CacheService.loadCache();
+        if (cache && (cache.title || cache.content.trim())) {
+            this._showCacheRecoveryDialog(cache);
+        } else {
+            this._titleEntry.grab_focus();
+            this._startAutoSave();
+        }
     }
 
     // ========================================================================
@@ -366,6 +378,10 @@ class JotWindow extends Adw.ApplicationWindow {
 
             print(`Note saved to ${this._state.currentFilePath}`);
             this._showFeedback(`✓ Saved: ${this._state.currentFilename}`);
+
+             // Clear cache and reset unsaved changes flag after successful save
+            CacheService.clearCache();
+            this._state.hasUnsavedChanges = false;
         } else {
             print(`Error writing file: ${result.error}`);
             this._showFeedback(`✗ Error: ${result.error}`);
@@ -416,6 +432,92 @@ class JotWindow extends Adw.ApplicationWindow {
         } catch (e) {
             print(`Error loading file: ${e.message}`);
         }
+    }
+
+    // ========================================================================
+    // AUTO-SAVE & CACHE RECOVERY
+    // ========================================================================
+
+    _startAutoSave() {
+        // Cancel any existing auto-save timer
+        if (this._state.autoSaveTimeoutId) {
+            GLib.source_remove(this._state.autoSaveTimeoutId);
+        }
+
+        // Auto-save every 3 seconds
+        this._state.autoSaveTimeoutId = GLib.timeout_add_seconds(
+            GLib.PRIORITY_DEFAULT,
+            Constants.AUTOSAVE_INTERVAL_SEC,
+            () => {
+                if (this._state.hasUnsavedChanges) {
+                    const title = this._titleEntry.get_text().trim();
+                    const buffer = this._textView.get_buffer();
+                    const [start, end] = buffer.get_bounds();
+                    const content = buffer.get_text(start, end, false);
+
+                    // Only cache if there's actual content
+                    if (content.trim()) {
+                        CacheService.saveCache(title, content);
+                        print('Auto-saved to cache');
+                    }
+                }
+                return true;
+            }
+        );
+
+        const buffer = this._textView.get_buffer();
+        buffer.connect('changed', () => {
+            this._state.hasUnsavedChanges = true;
+        });
+
+        // Track changes in title entry
+        this._titleEntry.connect('changed', () => {
+            this._state.hasUnsavedChanges = true;
+        });
+    }
+
+    _stopAutoSave() {
+        if (this._state.autoSaveTimeoutId) {
+            GLib.source_remove(this._state.autoSaveTimeoutId);
+            this._state.autoSaveTimeoutId = null;
+        }
+    }
+
+    _showCacheRecoveryDialog(cache) {
+        const dialog = new Adw.MessageDialog({
+            transient_for: this,
+            modal: true,
+            heading: 'Recover Unsaved Work?',
+            body: 'You have unsaved work from a previous session. Would you like to recover it?',
+        });
+
+        dialog.add_css_class('jot-recovery-dialog');
+
+        dialog.add_response('discard', 'Create New');
+        dialog.add_response('recover', 'Recover');
+        dialog.set_response_appearance('discard', Adw.ResponseAppearance.DESTRUCTIVE);
+        dialog.set_response_appearance('recover', Adw.ResponseAppearance.SUGGESTED);
+        dialog.set_default_response('recover');
+
+        dialog.connect('response', (dialog, response) => {
+            if (response === 'recover') {
+                // Load cached content
+                this._titleEntry.set_text(cache.title);
+                const buffer = this._textView.get_buffer();
+                buffer.set_text(cache.content, -1);
+                this._state.hasUnsavedChanges = true;
+                print('Cache recovered');
+            } else {
+                CacheService.clearCache();
+                print('Cache discarded');
+            }
+
+            this._titleEntry.grab_focus();
+            this._startAutoSave();
+            dialog.close();
+        });
+
+        dialog.present();
     }
 
     // ========================================================================
@@ -500,6 +602,16 @@ class JotWindow extends Adw.ApplicationWindow {
             this._pathLabel.set_label(actualPath);
             return false;
         });
+    }
+
+    vfunc_close_request() {
+        // Stop auto-save when window closes
+        this._stopAutoSave();
+
+        // Cache remains for recovery if not explicitly saved
+        // Will auto-expire after 5 minutes
+
+        return false; // Allow window to close
     }
 });
 

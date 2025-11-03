@@ -69,3 +69,7 @@ var DEFAULT_THEME = {
     cyan: '#39c5cf',
     white: '#e6edf3',
 };
+
+// Auto-save configuration
+var AUTOSAVE_INTERVAL_SEC = 3;      // Save every 3 seconds
+var CACHE_EXPIRY_MINUTES = 5;      // Cache valid for 5 minutes
