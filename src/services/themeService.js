@@ -278,6 +278,29 @@ var ThemeService = class ThemeService {
                 font-size: ${12 * zoom}px;
                 font-family: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', 'DejaVu Sans Mono', 'Courier New', monospace;
             }
+
+            .jot-recovery-dialog{
+               background: ${c.black};
+               color: ${c.white};
+            }
+            .jot-recovery-dialog button {
+                padding: 4px 12px;
+                border-radius: 0;
+                border: 1px solid ${c.white};
+                background: ${c.black};
+                color: ${c.white};
+                font-weight: 500;
+                font-size: 11px;
+            }
+            .jot-recovery-dialog button.destructive-action {
+                background: ${c.black};
+                color: ${c.white}
+            }
+            .jot-recovery-dialog button.suggested-action {
+                background: ${c.green};
+                border-color: ${c.green};
+                color: ${c.black};
+            }
         `;
     }
 };
