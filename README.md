@@ -8,14 +8,17 @@ https://github.com/user-attachments/assets/e132e309-d115-4bd1-a965-b219b8458457
 
 ## Features
 
-- **📝 Title-based notes**: Optional markdown title with automatic filename generation
-- **💾 Smart saving**: Save to `~/Documents/Jot/` or keep editing existing files in place
-- **🎨 Theme integration**: Automatically syncs with your theme colors
-- **⌨️ Keyboard shortcuts**: `Ctrl+S` to save, `Ctrl+P` for fuzzy search, `Escape` to close
-- **🔍 Fuzzy search**: Quick file finder with content search and live preview (`Ctrl+P`)
-- **📂 File management**: Open existing `.md` and `.txt` files from any location
-- **🔄 Live preview**: Real-time character and word count in status bar
-- **🎯 Zero friction**: Clean, distraction-free interface
+- **Title-based notes**: Optional markdown title with automatic filename generation
+- **Smart saving**: Save to `~/Documents/Jot/` or keep editing existing files in place
+- **Double-click save for Save As**: Double-click the save button to choose a different location
+- **Auto-save with cache recovery**: Automatic saving every 3 seconds with crash recovery
+- **Theme integration**: Automatically syncs with your Alacritty theme colors
+- **Keyboard shortcuts**: Full keyboard navigation with zoom controls
+- **Fuzzy search**: Quick file finder with content search and live preview
+- **File management**: Open existing `.md` and `.txt` files from any location
+- **Zoom controls**: Adjust text size with `Ctrl++`, `Ctrl+-`, and `Ctrl+0`
+- **Modern ES6 codebase**: Clean, maintainable code using modern JavaScript standards
+- **Zero friction**: Clean, distraction-free interface
 
 ## Installation
 
@@ -84,32 +87,40 @@ Launch from your application menu after installing the desktop entry.
 
 - **Ctrl+S** or **Ctrl+Enter**: Save note (keeps app open)
 - **Ctrl+P**: Open fuzzy search to find and open files by name or content
+- **Ctrl++**: Zoom in (increase text size)
+- **Ctrl+-**: Zoom out (decrease text size)
+- **Ctrl+0**: Reset zoom to default
 - **Escape**: Close application
-- **+** button: Open existing file
+- **Open button**: Open existing file from anywhere
 
 ### Interface
 
 - **Title field**: Optional markdown title (prefixed with `#`)
 - **Text area**: Main content area with word wrap and scrolling
-- **Status line**: Shows character count, word count, file path, and action buttons
+- **Status line**: Shows current file path and action buttons
+- **Open button**: Browse and open existing files
+- **Cancel button**: Close the application without saving
+- **Save button**: Save the current note (double-click for Save As)
 
 ### Setting Up Global Hotkey
 
 Configure a global hotkey in your desktop environment to launch Jot:
 
-**Omarchy:**
+**Hyprland:**
 ```bash
 # ~/.config/hypr/bindings.conf
-bindd = SUPER SHIFT, J, Jot, exec, uwsm app -- jot
+bind = SUPER SHIFT, J, exec, jot
 ```
-### Open Jot as an Overlay 
 
-Open Jot in a Floating window:
+### Open Jot as an Overlay
 
-**Omarchy:**
+Open Jot in a floating window:
+
+**Hyprland:**
 ```bash
-# ~/.config/hypr/bindings.conf
-windowrule = float, class:com.github.jot
+# ~/.config/hypr/windowrules.conf
+windowrule = float, class:^(com.github.jot)$
+windowrule = size 700 500, class:^(com.github.jot)$
 ```
 
 ## File Organization
@@ -135,7 +146,11 @@ Your note content goes here.
 
 ### Opening Existing Files
 
-Click the **+** button in the status line to open existing `.md` or `.txt` files from anywhere. When you save, the file will be updated in its original location.
+Click the **Open** button in the status line to browse and open existing `.md` or `.txt` files from anywhere. When you save, the file will be updated in its original location.
+
+### Auto-Save and Cache Recovery
+
+Jot automatically saves your work every 3 seconds to a cache file. If the application closes unexpectedly, you'll be prompted to recover your unsaved work when you restart. The cache expires after 5 minutes of inactivity.
 
 ## Theme Integration
 
