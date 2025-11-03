@@ -15,6 +15,7 @@ const FEEDBACK_TIMEOUT_MS = 3000;
 const KEY_ESCAPE = 65307;
 const KEY_ENTER = 65293;
 const KEY_S = 115;
+const KEY_P = 112;       // 'p' key
 const KEY_PLUS = 61;     // '+' key (also '=' key without shift)
 const KEY_MINUS = 45;    // '-' key
 const KEY_0 = 48;        // '0' key
@@ -243,6 +244,59 @@ class ThemeManager {
                 background: ${c.white};
                 color: ${c.black};
             }
+
+            .fuzzy-search-dialog {
+                background: ${c.black};
+                border: 1px solid ${c.white};
+            }
+
+            .fuzzy-search-entry {
+                background: ${c.black};
+                color: ${c.white};
+                border: none;
+                border-bottom: 1px solid ${c.white};
+                padding: 8px 12px;
+                font-size: ${14 * zoom}px;
+                font-family: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', 'DejaVu Sans Mono', 'Courier New', monospace;
+            }
+
+            .fuzzy-search-entry:focus {
+                outline: none;
+                box-shadow: none;
+                border-bottom: 1px solid ${c.blue};
+            }
+
+            .fuzzy-results-list {
+                background: ${c.black};
+            }
+
+            .fuzzy-result-item {
+                padding: 8px 12px;
+                font-size: ${13 * zoom}px;
+                font-family: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', 'DejaVu Sans Mono', 'Courier New', monospace;
+            }
+
+            .fuzzy-result-item label {
+                color: ${c.white};
+            }
+
+            .fuzzy-result-item:selected {
+                background: ${c.blue};
+                color: ${c.white};
+            }
+
+            .fuzzy-result-item:hover {
+                background: ${c.blue};
+            }
+
+            .fuzzy-preview {
+                background: ${c.black};
+                color: ${c.white};
+                border-left: 1px solid ${c.white};
+                padding: 12px;
+                font-size: ${12 * zoom}px;
+                font-family: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', 'DejaVu Sans Mono', 'Courier New', monospace;
+            }
         `;
     }
 }
@@ -359,6 +413,153 @@ class FileManager {
             filePath: file.get_path(),
             filename: file.get_basename(),
         };
+    }
+}
+
+// ============================================================================
+// Fuzzy Search Manager
+// ============================================================================
+
+class FuzzySearchManager {
+    static scanDirectory(dirPath) {
+        const results = [];
+        const dir = Gio.File.new_for_path(dirPath);
+
+        try {
+            const enumerator = dir.enumerate_children(
+                'standard::name,standard::type',
+                Gio.FileQueryInfoFlags.NONE,
+                null
+            );
+
+            let fileInfo;
+            while ((fileInfo = enumerator.next_file(null)) !== null) {
+                const name = fileInfo.get_name();
+                const fileType = fileInfo.get_file_type();
+
+                // Only process text files
+                if (fileType === Gio.FileType.REGULAR &&
+                    (name.endsWith('.md') || name.endsWith('.txt'))) {
+                    const filePath = GLib.build_filenamev([dirPath, name]);
+                    const file = Gio.File.new_for_path(filePath);
+
+                    try {
+                        const [success, contents] = file.load_contents(null);
+                        if (success) {
+                            const text = new TextDecoder().decode(contents);
+                            results.push({
+                                filename: name,
+                                filepath: filePath,
+                                content: text,
+                            });
+                        }
+                    } catch (e) {
+                        print(`Error reading file ${name}: ${e.message}`);
+                    }
+                }
+            }
+        } catch (e) {
+            print(`Error scanning directory: ${e.message}`);
+        }
+
+        return results;
+    }
+
+    static fuzzyMatch(query, text) {
+        if (!query) return { matches: true, score: 0, matchIndices: [] };
+
+        const lowerQuery = query.toLowerCase();
+        const lowerText = text.toLowerCase();
+
+        // Simple fuzzy matching: check if all query characters appear in order
+        let queryIndex = 0;
+        let score = 0;
+        let lastMatchIndex = -1;
+        const matchIndices = [];
+
+        for (let i = 0; i < lowerText.length && queryIndex < lowerQuery.length; i++) {
+            if (lowerText[i] === lowerQuery[queryIndex]) {
+                // Boost score for consecutive matches
+                if (lastMatchIndex === i - 1) {
+                    score += 2;
+                } else {
+                    score += 1;
+                }
+                lastMatchIndex = i;
+                matchIndices.push(i);
+                queryIndex++;
+            }
+        }
+
+        const matches = queryIndex === lowerQuery.length;
+        return { matches, score, matchIndices };
+    }
+
+    static highlightMatchesWithColor(text, matchIndices, color) {
+        if (!matchIndices || matchIndices.length === 0) {
+            return GLib.markup_escape_text(text, -1);
+        }
+
+        let result = '';
+        const matchSet = new Set(matchIndices);
+        let inHighlight = false;
+
+        for (let i = 0; i < text.length; i++) {
+            const isMatch = matchSet.has(i);
+            const char = GLib.markup_escape_text(text[i], -1);
+
+            if (isMatch && !inHighlight) {
+                // Start highlighting
+                result += `<span foreground="${color}" weight="bold">`;
+                inHighlight = true;
+            } else if (!isMatch && inHighlight) {
+                // End highlighting
+                result += '</span>';
+                inHighlight = false;
+            }
+
+            result += char;
+        }
+
+        // Close any open highlight tag
+        if (inHighlight) {
+            result += '</span>';
+        }
+
+        return result;
+    }
+
+    static searchFiles(files, query) {
+        if (!query) {
+            return files.map(f => ({ ...f, score: 0, matchIndices: [], contentMatchIndices: [] }));
+        }
+
+        const results = [];
+
+        for (const file of files) {
+            // Search in filename
+            const filenameMatch = this.fuzzyMatch(query, file.filename);
+
+            // Search in content
+            const contentMatch = this.fuzzyMatch(query, file.content);
+
+            if (filenameMatch.matches || contentMatch.matches) {
+                // Prioritize filename matches
+                const totalScore = (filenameMatch.score * 3) + contentMatch.score;
+                results.push({
+                    ...file,
+                    score: totalScore,
+                    matchType: filenameMatch.matches ? 'filename' : 'content',
+                    matchIndices: filenameMatch.matches ? filenameMatch.matchIndices : [],
+                    contentMatchIndices: contentMatch.matches ? contentMatch.matchIndices : [],
+                });
+            }
+        }
+
+        // Sort by score (higher is better)
+        results.sort((a, b) => b.score - a.score);
+
+        return results;
     }
 }
 
@@ -583,6 +784,11 @@ class JotWindow extends Adw.ApplicationWindow {
                 return true;
             }
             // Zoom in: Ctrl + or Ctrl = (multiple keycodes for compatibility)
+            // Ctrl+P: Open fuzzy search
+            if (keyval === KEY_P && (state & CTRL_MASK)) {
+                this._openFuzzySearch();
+                return true;
+            }
             if ((keyval === KEY_PLUS || keyval === 43 || keyval === 61 || keyval === 65451 || keyval === 65455) && (state & CTRL_MASK)) {
                 this._zoomIn();
                 return true;
@@ -815,6 +1021,239 @@ class JotWindow extends Adw.ApplicationWindow {
         } catch (e) {
             print(`Error loading file: ${e.message}`);
         }
+    }
+
+    _openFuzzySearch() {
+        // Scan files from Jot directory
+        const jotDir = FileManager.getJotDirectory();
+        const allFiles = FuzzySearchManager.scanDirectory(jotDir);
+
+        if (allFiles.length === 0) {
+            this._showFeedback('⚠ No files found in Jot directory');
+            return;
+        }
+
+        // Get highlight color from theme
+        const highlightColor = this._themeManager.colors.blue;
+
+        // Create dialog
+        const dialog = new Gtk.Window({
+            transient_for: this,
+            modal: true,
+            default_width: 800,
+            default_height: 500,
+            title: 'Search Files',
+        });
+        dialog.add_css_class('fuzzy-search-dialog');
+
+        // Main container
+        const mainBox = new Gtk.Box({
+            orientation: Gtk.Orientation.VERTICAL,
+            spacing: 0,
+        });
+
+        // Search entry
+        const searchEntry = new Gtk.Entry({
+            placeholder_text: 'Type to search files and content...',
+            hexpand: true,
+        });
+        searchEntry.add_css_class('fuzzy-search-entry');
+
+        // Content box (results on left, preview on right)
+        const contentBox = new Gtk.Box({
+            orientation: Gtk.Orientation.HORIZONTAL,
+            spacing: 0,
+            vexpand: true,
+        });
+
+        // Results list
+        const scrolledWindow = new Gtk.ScrolledWindow({
+            hexpand: true,
+            vexpand: true,
+            min_content_width: 350,
+        });
+
+        const listBox = new Gtk.ListBox({
+            selection_mode: Gtk.SelectionMode.SINGLE,
+        });
+        listBox.add_css_class('fuzzy-results-list');
+        scrolledWindow.set_child(listBox);
+
+        // Preview pane
+        const previewScroll = new Gtk.ScrolledWindow({
+            hexpand: true,
+            vexpand: true,
+        });
+
+        const previewText = new Gtk.TextView({
+            editable: false,
+            wrap_mode: Gtk.WrapMode.WORD_CHAR,
+            left_margin: 12,
+            right_margin: 12,
+            top_margin: 12,
+            bottom_margin: 12,
+        });
+        previewText.add_css_class('fuzzy-preview');
+        previewScroll.set_child(previewText);
+
+        contentBox.append(scrolledWindow);
+        contentBox.append(previewScroll);
+
+        mainBox.append(searchEntry);
+        mainBox.append(contentBox);
+        dialog.set_child(mainBox);
+
+        // Store current results
+        let currentResults = allFiles.map(f => ({ ...f, score: 0 }));
+
+        // Function to update results
+        const updateResults = () => {
+            const query = searchEntry.get_text();
+            currentResults = FuzzySearchManager.searchFiles(allFiles, query);
+
+            // Clear existing items
+            let child = listBox.get_first_child();
+            while (child) {
+                const next = child.get_next_sibling();
+                listBox.remove(child);
+                child = next;
+            }
+
+            // Add new results (limit to 100 for performance)
+            const displayResults = currentResults.slice(0, 100);
+            for (const result of displayResults) {
+                const highlightedText = FuzzySearchManager.highlightMatchesWithColor(
+                    result.filename,
+                    result.matchIndices || [],
+                    highlightColor
+                );
+
+                const label = new Gtk.Label({
+                    xalign: 0,
+                });
+                label.set_use_markup(true);
+                label.set_markup(highlightedText);
+                label.add_css_class('fuzzy-result-item');
+
+                const row = new Gtk.ListBoxRow();
+                row.set_child(label);
+                row._fileData = result; // Store file data
+                listBox.append(row);
+            }
+
+            // Select first item if available
+            if (displayResults.length > 0) {
+                listBox.select_row(listBox.get_first_child());
+            }
+        };
+
+        // Update preview when selection changes
+        const updatePreview = () => {
+            const selectedRow = listBox.get_selected_row();
+            if (selectedRow && selectedRow._fileData) {
+                const buffer = previewText.get_buffer();
+                const content = selectedRow._fileData.content.substring(0, 5000); // Limit preview size
+
+                // Set the text first
+                buffer.set_text(content, -1);
+
+                // Get current search query
+                const query = searchEntry.get_text();
+
+                if (query && selectedRow._fileData.contentMatchIndices && selectedRow._fileData.contentMatchIndices.length > 0) {
+                    // Create a tag for highlighting
+                    const tagTable = buffer.get_tag_table();
+                    let highlightTag = tagTable.lookup('highlight');
+                    if (!highlightTag) {
+                        highlightTag = new Gtk.TextTag({
+                            name: 'highlight',
+                            foreground: highlightColor,
+                            weight: 700, // Bold
+                        });
+                        tagTable.add(highlightTag);
+                    } else {
+                        // Remove existing highlights
+                        const startIter = buffer.get_start_iter();
+                        const endIter = buffer.get_end_iter();
+                        buffer.remove_tag(highlightTag, startIter, endIter);
+                    }
+
+                    // Apply highlights to matched positions
+                    const matchSet = new Set(selectedRow._fileData.contentMatchIndices);
+                    for (let i = 0; i < Math.min(content.length, 5000); i++) {
+                        if (matchSet.has(i)) {
+                            const startIter = buffer.get_iter_at_offset(i);
+                            const endIter = buffer.get_iter_at_offset(i + 1);
+                            buffer.apply_tag(highlightTag, startIter, endIter);
+                        }
+                    }
+                }
+            }
+        };
+
+        listBox.connect('row-selected', updatePreview);
+
+        // Handle search input
+        searchEntry.connect('changed', () => {
+            updateResults();
+            updatePreview();
+        });
+
+        // Handle Enter key to open file
+        const searchKeyController = new Gtk.EventControllerKey();
+        searchKeyController.connect('key-pressed', (controller, keyval, keycode, state) => {
+            if (keyval === KEY_ENTER) {
+                const selectedRow = listBox.get_selected_row();
+                if (selectedRow && selectedRow._fileData) {
+                    const file = Gio.File.new_for_path(selectedRow._fileData.filepath);
+                    this.loadFile(file);
+                    dialog.close();
+                }
+                return true;
+            }
+            if (keyval === KEY_ESCAPE) {
+                dialog.close();
+                return true;
+            }
+            // Arrow down - move to list
+            if (keyval === 65364) { // Down arrow
+                const firstRow = listBox.get_first_child();
+                if (firstRow) {
+                    listBox.select_row(firstRow);
+                    firstRow.grab_focus();
+                }
+                return true;
+            }
+            return false;
+        });
+        searchEntry.add_controller(searchKeyController);
+
+        // Handle keyboard navigation in list
+        const listKeyController = new Gtk.EventControllerKey();
+        listKeyController.connect('key-pressed', (controller, keyval, keycode, state) => {
+            if (keyval === KEY_ENTER) {
+                const selectedRow = listBox.get_selected_row();
+                if (selectedRow && selectedRow._fileData) {
+                    const file = Gio.File.new_for_path(selectedRow._fileData.filepath);
+                    this.loadFile(file);
+                    dialog.close();
+                }
+                return true;
+            }
+            if (keyval === KEY_ESCAPE) {
+                dialog.close();
+                return true;
+            }
+            return false;
+        });
+        listBox.add_controller(listKeyController);
+
+        // Initial population
+        updateResults();
+
+        // Show dialog and focus search entry
+        dialog.present();
+        searchEntry.grab_focus();
     }
 });
 

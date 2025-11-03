@@ -11,7 +11,8 @@ https://github.com/user-attachments/assets/e132e309-d115-4bd1-a965-b219b8458457
 - **📝 Title-based notes**: Optional markdown title with automatic filename generation
 - **💾 Smart saving**: Save to `~/Documents/Jot/` or keep editing existing files in place
 - **🎨 Theme integration**: Automatically syncs with your theme colors
-- **⌨️ Keyboard shortcuts**: `Ctrl+S` to save, `Escape` to close
+- **⌨️ Keyboard shortcuts**: `Ctrl+S` to save, `Ctrl+P` for fuzzy search, `Escape` to close
+- **🔍 Fuzzy search**: Quick file finder with content search and live preview (`Ctrl+P`)
 - **📂 File management**: Open existing `.md` and `.txt` files from any location
 - **🔄 Live preview**: Real-time character and word count in status bar
 - **🎯 Zero friction**: Clean, distraction-free interface
@@ -82,6 +83,7 @@ Launch from your application menu after installing the desktop entry.
 ### Keyboard Shortcuts
 
 - **Ctrl+S** or **Ctrl+Enter**: Save note (keeps app open)
+- **Ctrl+P**: Open fuzzy search to find and open files by name or content
 - **Escape**: Close application
 - **+** button: Open existing file
 
