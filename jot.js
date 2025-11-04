@@ -63,15 +63,15 @@ function getScriptDirectory() {
         const { SearchDialogBuilder } = await import(`file://${scriptDir}/src/ui/searchDialog.js`);
         const { CacheService } = await import(`file://${scriptDir}/src/services/cacheService.js`);
 
-// ============================================================================
-// APPLICATION
-// ============================================================================
+        // ============================================================================
+        // APPLICATION
+        // ============================================================================
 
-/**
- * Main application class
- * Manages application lifecycle and window creation
- */
-class JotApplication extends Adw.Application {
+        /**
+         * Main application class
+         * Manages application lifecycle and window creation
+         */
+        class JotApplication extends Adw.Application {
             constructor() {
                 super({
                     application_id: Constants.APP_ID,
