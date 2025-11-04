@@ -48,46 +48,30 @@ function getScriptDirectory() {
 }
 
 // ============================================================================
-// ENTRY POINT (FULLY SCOPED WITHIN ASYNC IIFE)
+// DYNAMIC IMPORTS WITH SYMLINK RESOLUTION
 // ============================================================================
 
 (async () => {
     try {
         const scriptDir = getScriptDirectory();
-        GLib.chdir(scriptDir);  // Set CWD to project root for any relative ops
+        GLib.chdir(scriptDir);
 
-        // Dynamic imports with try/catch to handle failures explicitly
-        let Constants, ThemeService, FileService, SearchDialogBuilder, CacheService;
-        try {
-            // Ensure paths are absolute file:// URIs
-            const constantsModule = await import(`file://${scriptDir}/src/constants/defaults.js`);
-            Constants = constantsModule;
+        // Dynamic imports with absolute paths
+        const Constants = await import(`file://${scriptDir}/src/constants/defaults.js`);
+        const { ThemeService } = await import(`file://${scriptDir}/src/services/themeService.js`);
+        const { FileService } = await import(`file://${scriptDir}/src/services/fileService.js`);
+        const { SearchDialogBuilder } = await import(`file://${scriptDir}/src/ui/searchDialog.js`);
+        const { CacheService } = await import(`file://${scriptDir}/src/services/cacheService.js`);
 
-            const themeModule = await import(`file://${scriptDir}/src/services/themeService.js`);
-            ({ ThemeService } = themeModule);
+// ============================================================================
+// APPLICATION
+// ============================================================================
 
-            const fileModule = await import(`file://${scriptDir}/src/services/fileService.js`);
-            ({ FileService } = fileModule);
-
-            const searchModule = await import(`file://${scriptDir}/src/ui/searchDialog.js`);
-            ({ SearchDialogBuilder } = searchModule);
-
-            const cacheModule = await import(`file://${scriptDir}/src/services/cacheService.js`);
-            ({ CacheService } = cacheModule);
-        } catch (e) {
-            print(`FATAL: Failed to import module: ${e.message}`);
-            throw e;
-        }
-
-        // ============================================================================
-        // APPLICATION CLASS (DEFINED HERE, IN SCOPE WITH IMPORTS)
-        // ============================================================================
-
-        /**
-         * Main application class
-         * Manages application lifecycle and window creation
-         */
-        class JotApplication extends Adw.Application {
+/**
+ * Main application class
+ * Manages application lifecycle and window creation
+ */
+class JotApplication extends Adw.Application {
             constructor() {
                 super({
                     application_id: Constants.APP_ID,
@@ -121,7 +105,7 @@ function getScriptDirectory() {
         GObject.registerClass(JotApplication);
 
         // ============================================================================
-        // MAIN WINDOW CLASS (DEFINED HERE, IN SCOPE WITH IMPORTS)
+        // MAIN WINDOW
         // ============================================================================
 
         /**
@@ -685,13 +669,15 @@ function getScriptDirectory() {
 
         GObject.registerClass(JotWindow);
 
-        // Now safe to create and run the app (constructors reference these in scope)
+        // ============================================================================
+        // ENTRY POINT
+        // ============================================================================
+
         const app = new JotApplication();
         app.run([System.programInvocationName].concat(ARGV));
     } catch (e) {
         print(`FATAL ERROR during app startup: ${e.message}`);
         print(e.stack || 'No stack trace available');
-        // Exit cleanly
         System.exit(1);
     }
 })();
