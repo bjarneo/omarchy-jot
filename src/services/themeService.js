@@ -34,12 +34,10 @@ export class ThemeService {
             const [success, contents] = file.load_contents(null);
 
             if (!success) {
-                print(`Theme file not found at: ${themePath}`);
                 return { ...Constants.DEFAULT_THEME };
             }
 
-            const parsedColors = this._parseTomlColors(new TextDecoder().decode(contents));
-            return parsedColors;
+            return this._parseTomlColors(new TextDecoder().decode(contents));
         } catch (e) {
             print(`Failed to load theme: ${e.message}`);
             return { ...Constants.DEFAULT_THEME };
@@ -67,13 +65,11 @@ export class ThemeService {
                 const [, key, value] = match;
                 // Only parse colors from relevant sections
                 if (currentSection === 'normal' || currentSection === 'primary' || currentSection === 'cursor' || currentSection === '') {
-                    colors[key] = value;
+                    // Convert 0x prefixed colors to # prefixed for CSS compatibility
+                    colors[key] = value.startsWith('0x') ? '#' + value.slice(2) : value;
                 }
             }
         }
-
-        // Debug: print what we found
-        // print(`Parsed colors: ${JSON.stringify(colors)}`);
 
         return {
             background: colors.background || Constants.DEFAULT_THEME.background,
@@ -98,12 +94,10 @@ export class ThemeService {
         try {
             const themePath = this._getThemePath();
             const file = Gio.File.new_for_path(themePath);
-            this.monitor = file.monitor_file(Gio.FileMonitorFlags.NONE, null);
-            this.monitor.connect('changed', (monitor, file, other_file, event_type) => {
-                // Only reload on actual file changes (modified, created, etc.)
-                if (event_type === Gio.FileMonitorEvent.CHANGED ||
-                    event_type === Gio.FileMonitorEvent.CREATED ||
-                    event_type === Gio.FileMonitorEvent.DELETED) {
+            const currentDir = file.get_parent().get_parent(); // ~/.config/omarchy/current
+            this.monitor = currentDir.monitor_directory(Gio.FileMonitorFlags.NONE, null);
+            this.monitor.connect('changed', (monitor, changedFile, otherFile, eventType) => {
+                if (changedFile.get_basename() === 'theme') {
                     this.colors = this._loadColors();
                     callback();
                 }
