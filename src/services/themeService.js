@@ -34,10 +34,12 @@ export class ThemeService {
             const [success, contents] = file.load_contents(null);
 
             if (!success) {
+                print(`Theme file not found at: ${themePath}`);
                 return { ...Constants.DEFAULT_THEME };
             }
 
-            return this._parseTomlColors(new TextDecoder().decode(contents));
+            const parsedColors = this._parseTomlColors(new TextDecoder().decode(contents));
+            return parsedColors;
         } catch (e) {
             print(`Failed to load theme: ${e.message}`);
             return { ...Constants.DEFAULT_THEME };
@@ -53,35 +55,25 @@ export class ThemeService {
         let currentSection = '';
 
         for (const line of lines) {
-            const sectionMatch = line.match(/^\[colors\.(\w+)\]/);
+            // Handle both [colors.primary] and [colors.normal] formats
+            const sectionMatch = line.match(/^\[colors(?:\.(\w+))?\]/);
             if (sectionMatch) {
-                currentSection = sectionMatch[1];
+                currentSection = sectionMatch[1] || '';
                 continue;
             }
 
-            const match = line.match(/^(\w+)\s*=\s*"([^"]+)"/);
-            if (match && (currentSection === 'normal' || currentSection === 'primary')) {
+            const match = line.match(/^(\w+)\s*=\s*["']([^"']+)["']/);
+            if (match) {
                 const [, key, value] = match;
-                colors[key] = value;
+                // Only parse colors from relevant sections
+                if (currentSection === 'normal' || currentSection === 'primary' || currentSection === 'cursor' || currentSection === '') {
+                    colors[key] = value;
+                }
             }
         }
 
-        // For primary section, map background and foreground
-        if (colors.background && colors.foreground) {
-            return {
-                background: colors.background,
-                foreground: colors.foreground,
-                cursor: colors.cursor || Constants.DEFAULT_THEME.cursor,
-                black: colors.black || Constants.DEFAULT_THEME.black,
-                red: colors.red || Constants.DEFAULT_THEME.red,
-                green: colors.green || Constants.DEFAULT_THEME.green,
-                yellow: colors.yellow || Constants.DEFAULT_THEME.yellow,
-                blue: colors.blue || Constants.DEFAULT_THEME.blue,
-                magenta: colors.magenta || Constants.DEFAULT_THEME.magenta,
-                cyan: colors.cyan || Constants.DEFAULT_THEME.cyan,
-                white: colors.white || Constants.DEFAULT_THEME.white,
-            };
-        }
+        // Debug: print what we found
+        // print(`Parsed colors: ${JSON.stringify(colors)}`);
 
         return {
             background: colors.background || Constants.DEFAULT_THEME.background,
@@ -107,9 +99,14 @@ export class ThemeService {
             const themePath = this._getThemePath();
             const file = Gio.File.new_for_path(themePath);
             this.monitor = file.monitor_file(Gio.FileMonitorFlags.NONE, null);
-            this.monitor.connect('changed', () => {
-                this.colors = this._loadColors();
-                callback();
+            this.monitor.connect('changed', (monitor, file, other_file, event_type) => {
+                // Only reload on actual file changes (modified, created, etc.)
+                if (event_type === Gio.FileMonitorEvent.CHANGED ||
+                    event_type === Gio.FileMonitorEvent.CREATED ||
+                    event_type === Gio.FileMonitorEvent.DELETED) {
+                    this.colors = this._loadColors();
+                    callback();
+                }
             });
         } catch (e) {
             print(`Failed to setup theme monitor: ${e.message}`);
