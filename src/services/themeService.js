@@ -53,16 +53,21 @@ export class ThemeService {
         let currentSection = '';
 
         for (const line of lines) {
-            const sectionMatch = line.match(/^\[colors\.(\w+)\]/);
+            // Handle both [colors.primary] and [colors.normal] formats
+            const sectionMatch = line.match(/^\[colors(?:\.(\w+))?\]/);
             if (sectionMatch) {
-                currentSection = sectionMatch[1];
+                currentSection = sectionMatch[1] || '';
                 continue;
             }
 
-            const match = line.match(/^(\w+)\s*=\s*"([^"]+)"/);
-            if (match && (currentSection === 'normal' || currentSection === 'primary')) {
+            const match = line.match(/^(\w+)\s*=\s*["']([^"']+)["']/);
+            if (match) {
                 const [, key, value] = match;
-                colors[key] = value;
+                // Only parse colors from relevant sections
+                if (currentSection === 'normal' || currentSection === 'primary' || currentSection === 'cursor' || currentSection === '') {
+                    // Convert 0x prefixed colors to # prefixed for CSS compatibility
+                    colors[key] = value.startsWith('0x') ? '#' + value.slice(2) : value;
+                }
             }
         }
 
@@ -89,10 +94,13 @@ export class ThemeService {
         try {
             const themePath = this._getThemePath();
             const file = Gio.File.new_for_path(themePath);
-            this.monitor = file.monitor_file(Gio.FileMonitorFlags.NONE, null);
-            this.monitor.connect('changed', () => {
-                this.colors = this._loadColors();
-                callback();
+            const currentDir = file.get_parent().get_parent(); // ~/.config/omarchy/current
+            this.monitor = currentDir.monitor_directory(Gio.FileMonitorFlags.NONE, null);
+            this.monitor.connect('changed', (monitor, changedFile, otherFile, eventType) => {
+                if (changedFile.get_basename() === 'theme') {
+                    this.colors = this._loadColors();
+                    callback();
+                }
             });
         } catch (e) {
             print(`Failed to setup theme monitor: ${e.message}`);
@@ -108,7 +116,7 @@ export class ThemeService {
         const zoom = zoomLevel / 100;
         return `
             window {
-                background: ${c.black};
+                background: ${c.background};
             }
 
             .jot-textview {
@@ -142,16 +150,16 @@ export class ThemeService {
             .jot-button {
                 padding: 4px 12px;
                 border-radius: 0;
-                border: 1px solid ${c.white};
-                background: ${c.black};
-                color: ${c.white};
+                border: 1px solid ${c.foreground};
+                background: ${c.background};
+                color: ${c.foreground};
                 font-weight: 500;
                 font-size: 11px;
             }
 
             .jot-button:hover {
-                background: ${c.white};
-                color: ${c.black};
+                background: ${c.foreground};
+                color: ${c.background};
             }
 
             .jot-button-save {
@@ -166,17 +174,17 @@ export class ThemeService {
             }
 
             .jot-statusbar {
-                border-top: 1px solid ${c.white};
+                border-top: 1px solid ${c.foreground};
                 padding-top: 10px;
             }
 
             .status-label {
-                color: ${c.white};
+                color: ${c.foreground};
                 font-size: 12px;
             }
 
             .jot-hash {
-                color: ${c.white};
+                color: ${c.foreground};
                 font-size: ${18 * zoom}px;
                 font-weight: bold;
                 font-family: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', 'DejaVu Sans Mono', 'Courier New', monospace;
@@ -186,7 +194,7 @@ export class ThemeService {
             .jot-title {
                 background: transparent;
                 border: none;
-                color: ${c.white};
+                color: ${c.foreground};
                 font-size: ${18 * zoom}px;
                 font-weight: bold;
                 font-family: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', 'DejaVu Sans Mono', 'Courier New', monospace;
@@ -215,28 +223,28 @@ export class ThemeService {
             .jot-open-button {
                 padding: 4px 12px;
                 border-radius: 0;
-                border: 1px solid ${c.white};
-                background: ${c.black};
-                color: ${c.white};
+                border: 1px solid ${c.foreground};
+                background: ${c.background};
+                color: ${c.foreground};
                 font-weight: 500;
                 font-size: 11px;
             }
 
             .jot-open-button:hover {
-                background: ${c.white};
-                color: ${c.black};
+                background: ${c.foreground};
+                color: ${c.background};
             }
 
             .fuzzy-search-dialog {
-                background: ${c.black};
-                border: 1px solid ${c.white};
+                background: ${c.background};
+                border: 1px solid ${c.foreground};
             }
 
             .fuzzy-search-entry {
-                background: ${c.black};
-                color: ${c.white};
+                background: ${c.background};
+                color: ${c.foreground};
                 border: none;
-                border-bottom: 1px solid ${c.white};
+                border-bottom: 1px solid ${c.foreground};
                 padding: 8px 12px;
                 font-size: ${14 * zoom}px;
                 font-family: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', 'DejaVu Sans Mono', 'Courier New', monospace;
@@ -249,7 +257,7 @@ export class ThemeService {
             }
 
             .fuzzy-results-list {
-                background: ${c.black};
+                background: ${c.background};
             }
 
             .fuzzy-result-item {
@@ -259,12 +267,12 @@ export class ThemeService {
             }
 
             .fuzzy-result-item label {
-                color: ${c.white};
+                color: ${c.foreground};
             }
 
             .fuzzy-result-item:selected {
                 background: ${c.blue};
-                color: ${c.white};
+                color: ${c.foreground};
             }
 
             .fuzzy-result-item:hover {
@@ -272,35 +280,35 @@ export class ThemeService {
             }
 
             .fuzzy-preview {
-                background: ${c.black};
-                color: ${c.white};
-                border-left: 1px solid ${c.white};
+                background: ${c.background};
+                color: ${c.foreground};
+                border-left: 1px solid ${c.foreground};
                 padding: 12px;
                 font-size: ${12 * zoom}px;
                 font-family: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', 'DejaVu Sans Mono', 'Courier New', monospace;
             }
 
             .jot-recovery-dialog{
-               background: ${c.black};
-               color: ${c.white};
+               background: ${c.background};
+               color: ${c.foreground};
             }
             .jot-recovery-dialog button {
                 padding: 4px 12px;
                 border-radius: 0;
-                border: 1px solid ${c.white};
-                background: ${c.black};
-                color: ${c.white};
+                border: 1px solid ${c.foreground};
+                background: ${c.background};
+                color: ${c.foreground};
                 font-weight: 500;
                 font-size: 11px;
             }
             .jot-recovery-dialog button.destructive-action {
-                background: ${c.black};
-                color: ${c.white}
+                background: ${c.background};
+                color: ${c.foreground};
             }
             .jot-recovery-dialog button.suggested-action {
                 background: ${c.green};
                 border-color: ${c.green};
-                color: ${c.black};
+                color: ${c.background};
             }
         `;
     }
