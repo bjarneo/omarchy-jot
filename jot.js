@@ -83,6 +83,8 @@ function getScriptDirectory() {
             vfunc_activate() {
                 let window = this.active_window;
                 if (!window) {
+                    // Ensure Jot directory exists on first launch
+                    FileService.ensureJotDirectoryExists();
                     window = new JotWindow(this);
                 }
 
